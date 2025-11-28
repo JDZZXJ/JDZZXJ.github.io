@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ˡᵒᵛᵉ♡ᵐᵉ便签墙</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            touch-action: manipulation;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background-image: linear-gradient(0deg, #eee 1px, transparent 0),
+                linear-gradient(90deg, #eee 1px, transparent 0);
+            background-size: 30px 30px;
+            color: #333;
+            min-height: 100dvh;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body.has-maximized-card {
+            overflow: hidden;
+        }
+
+        body.is-mobile {
+            overflow-y: auto;
+        }
+
+        #board {
+            position: relative;
+            width: 100vw;
+            height: 100dvh;
+            overflow: hidden;
+        }
+
+        body.is-mobile #board {
+            height: auto;
+            min-height: 100dvh;
+        }
+
+        .card {
+            position: absolute;
+            width: 220px;
+            border-radius: 12px;
+            box-shadow: 0 16px 35px rgba(0, 0, 0, 0.2);
+            background: #fff;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+            opacity: 0;
+            transform-origin: center;
+            transition: transform 0.35s ease, opacity 0.35s ease, left 0.35s ease,
+                top 0.35s ease, width 0.35s ease, height 0.35s ease,
+                border-radius 0.35s ease;
+        }
+
+        .card.dragging {
+            transition: none;
+            box-shadow: 0 22px 45px rgba(0, 0, 0, 0.35);
+        }
+
+        .card.maximized {
+            position: fixed;
+            inset: 0;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            border-radius: 0;
+            box-shadow: 0 28px 60px rgba(0, 0, 0, 0.4);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.7);
+            cursor: grab;
+            user-select: none;
+            touch-action: pan-y;
+        }
+
+        .card-header.dragging {
+            cursor: grabbing;
+        }
+
+        .window-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .window-controls .control {
+            position: relative;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            background: #ccc;
+            cursor: pointer;
+            outline: none;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .window-controls .control.close {
+            background: #ff5f57;
+            border-color: #e0443e;
+        }
+
+        .window-controls .control.minimize {
+            background: #febb2e;
+            border-color: #dea123;
+        }
+
+        .window-controls .control.maximize {
+            background: #28c840;
+            border-color: #1aab2c;
+        }
+
+        .window-controls .control::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .card-header:hover .window-controls .control::after {
+            opacity: 0.8;
+        }
+
+        .window-controls .control.close::after {
+            content: '×';
+            width: auto;
+            height: auto;
+            background: none;
+            font-size: 10px;
+            line-height: 1;
+            font-weight: 700;
+            color: rgba(0, 0, 0, 0.7);
+        }
+
+        .window-controls .control.minimize::after {
+            width: 6px;
+            height: 2px;
+            background: rgba(0, 0, 0, 0.6);
+        }
+
+        .window-controls .control.maximize::after {
+            width: 6px;
+            height: 6px;
+            background: linear-gradient(
+                45deg,
+                rgba(0, 0, 0, 0.6) 0%,
+                rgba(0, 0, 0, 0.6) 45%,
+                transparent 45%,
+                transparent 55%,
+                rgba(0, 0, 0, 0.6) 55%,
+                rgba(0, 0, 0, 0.6) 100%
+            );
+        }
+
+        .card-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: rgba(0, 0, 0, 0.55);
+            padding-left: 10px;
+            flex: 1;
+        }
+
+        .card-body {
+            padding: 16px;
+            font-size: 16px;
+            line-height: 1.4;
+            font-weight: 600;
+            color: rgba(0, 0, 0, 0.72);
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            white-space: normal;
+        }
+
+        .card.maximized {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card.maximized .card-title {
+            display: none;
+        }
+
+        .card.maximized .card-body {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            padding: clamp(32px, min(10vw, 10vh), 128px);
+            padding-top: clamp(72px, min(14vw, 14vh), 192px);
+            font-size: clamp(48px, min(18vw, 18vh), 200px);
+            line-height: 1.05;
+        }
+
+        #clear-all-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            transition: all 0.3s ease;
+        }
+
+        #clear-all-btn:hover {
+            transform: scale(1.1);
+            background: rgba(255, 255, 255, 1);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        .trash-icon {
+            width: 24px;
+            height: 24px;
+            position: relative;
+        }
+
+        .trash-icon::before,
+        .trash-icon::after {
+            content: '';
+            position: absolute;
+            background: #555;
+        }
+
+        .trash-icon::before {
+            width: 18px;
+            height: 2px;
+            top: 4px;
+            left: 3px;
+            border-radius: 1px;
+        }
+
+        .trash-icon::after {
+            width: 14px;
+            height: 12px;
+            top: 6px;
+            left: 5px;
+            border-radius: 2px 2px 0 0;
+        }
+
+        .trash-lid {
+            position: absolute;
+            width: 16px;
+            height: 2px;
+            background: #555;
+            top: 4px;
+            left: 4px;
+            border-radius: 1px;
+        }
+
+        .trash-body {
+            position: absolute;
+            width: 14px;
+            height: 12px;
+            background: #555;
+            top: 6px;
+            left: 5px;
+            border-radius: 2px 2px 0 0;
+        }
+
+        .trash-line {
+            position: absolute;
+            width: 2px;
+            height: 8px;
+            background: #777;
+            top: 8px;
+        }
+
+        .trash-line:nth-child(1) {
+            left: 7px;
+        }
+
+        .trash-line:nth-child(2) {
+            left: 11px;
+        }
+
+        .trash-line:nth-child(3) {
+            left: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .card {
+                width: 180px;
+                border-radius: 10px;
+            }
+
+            .card-body {
+                padding: 14px;
+                font-size: 14px;
+            }
+
+            .card-title {
+                font-size: 12px;
+            }
+            
+            #clear-all-btn {
+                width: 44px;
+                height: 44px;
+                top: 16px;
+                right: 16px;
+            }
+            
+            .trash-icon {
+                width: 20px;
+                height: 20px;
+            }
+            
+            .trash-icon::before {
+                width: 16px;
+                top: 3px;
+                left: 2px;
+            }
+            
+            .trash-icon::after {
+                width: 12px;
+                height: 10px;
+                top: 5px;
+                left: 4px;
+            }
+            
+            .trash-lid {
+                width: 14px;
+                top: 3px;
+                left: 3px;
+            }
+            
+            .trash-body {
+                width: 12px;
+                height: 10px;
+                top: 5px;
+                left: 4px;
+            }
+            
+            .trash-line {
+                height: 6px;
+                top: 7px;
+            }
+            
+            .trash-line:nth-child(1) {
+                left: 6px;
+            }
+            
+            .trash-line:nth-child(2) {
+                left: 9px;
+            }
+            
+            .trash-line:nth-child(3) {
+                left: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="board"></div>
+    <button id="clear-all-btn" title="清除所有便签">
+        <div class="trash-icon">
+            <div class="trash-lid"></div>
+            <div class="trash-body"></div>
+            <div class="trash-line"></div>
+            <div class="trash-line"></div>
+            <div class="trash-line"></div>
+        </div>
+    </button>
+
+    <script>
+        const board = document.getElementById('board')
+        const clearAllBtn = document.getElementById('clear-all-btn')
+        const messages = [
+            '保持好心情',
+            '多喝水哦',
+            '今天辛苦啦',
+            '记得吃水果',
+            '祝你顺利',
+            '保持微笑呀',
+            '愿所有烦恼都消失',
+            '期待下一次见面',
+            '梦想总会实现',
+            '天气冷了多穿衣服',
+            '记得给自己放松',
+            '每天都要元气满满',
+            '今天也要好好爱自己',
+            '适当休息一下',
+            '你是最棒的',
+            '一切都会好起来',
+            '相信自己',
+            '今天又是美好的一天',
+            '微笑面对生活',
+            '慢慢来别着急',
+            '你已经做得很好了',
+            '勇敢做自己',
+            '未来可期',
+            '生活因你而精彩',
+            '记得按时吃饭',
+            '出门带伞了吗',
+            '别忘了给家人打电话',
+            '整理一下房间吧',
+            '今天运动了吗',
+            '放下手机休息会儿',
+            '每天读一本好书吧',
+            '听听喜欢的音乐',
+            '记录今天的小确幸',
+            '深呼吸放松一下',
+            '每天进步一点点',
+            '坚持就是胜利',
+            '机会留给有准备的人',
+            '学习永无止境',
+            '困难是暂时的',
+            '成长需要时间',
+            '勇敢尝试新事物',
+            '失败是成功之母',
+            '专注当下最重要',
+            '行动胜过千言万语',
+            '累了就歇一歇',
+            '别给自己太大压力',
+            '你值得被爱',
+            '世界因你而美丽',
+            '感恩拥有的一切',
+            '善待自己和他人',
+            '简单就是幸福',
+            '珍惜当下时光',
+            '你是独一无二的',
+            '生活处处有惊喜',
+            '春天来了去踏青吧',
+            '夏日炎炎注意防暑',
+            '秋高气爽适合出游',
+            '冬日暖阳温暖人心',
+            '春暖花开心情愉悦',
+            '夏日微风清凉一夏',
+            '秋叶飘落静心思考',
+            '冬日雪花浪漫时刻',
+            '心怀感恩知足常乐',
+            '善良是最好的品质',
+            '坚持做正确的事',
+            '内心强大才是真正的强大',
+            '享受独处的时光',
+            '培养一个好习惯',
+            '帮助他人快乐自己',
+            '保持好奇心',
+            '学会倾听',
+            '真诚待人',
+            '宽容理解他人',
+            '保持谦逊',
+            '耐心等待花开',
+            '欣赏身边的美',
+            '用心感受生活',
+            '学习新技能',
+            '学会放手',
+            '保持开放心态',
+            '尊重差异',
+            '庆祝小成就',
+            '接受挑战'
+        ]
+
+        const colors = [
+            '#ffe0e3',
+            '#c7f0ff',
+            '#ffd8a8',
+            '#d9f2d9',
+            '#e5d7ff',
+            '#f9f7d9',
+            '#d2f0f8',
+            '#ffd4f5',
+            '#e3ffe3',
+            '#fff0e3',
+            '#e3f2ff',
+            '#fff8e3'
+        ]
+
+        const cardStates = new WeakMap()
+        const MAXIMIZED_LAYER = 1000000
+        let activeMaximizedCard = null
+        const pointerMediaQuery = window.matchMedia('(pointer: coarse)')
+        let isMobile = pointerMediaQuery.matches || window.innerWidth <= 768
+        let maxCards = isMobile ? 100 : 150
+        const initialCardCount = isMobile ? 8 : 12
+        
+        let spawnInterval = isMobile ? 500 : 300
+        
+        let zIndexCursor = 200
+        let spawnTimer = null
+        
+        let unusedMessages = [...messages]
+        let usedMessages = []
+
+        document.body.classList.toggle('is-mobile', isMobile)
+
+        document.addEventListener('wheel', function(e) {
+            if (e.ctrlKey) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        document.addEventListener('gesturestart', function(e) {
+            e.preventDefault();
+        });
+
+        document.addEventListener('gesturechange', function(e) {
+            e.preventDefault();
+        });
+
+        document.addEventListener('gestureend', function(e) {
+            e.preventDefault();
+        });
+
+        function randomFrom(array) {
+            return array[Math.floor(Math.random() * array.length)]
+        }
+
+        function getNextMessage() {
+            if (unusedMessages.length === 0) {
+                unusedMessages = [...messages]
+                usedMessages = []
+            }
+            
+            const randomIndex = Math.floor(Math.random() * unusedMessages.length)
+            const message = unusedMessages[randomIndex]
+            
+            unusedMessages.splice(randomIndex, 1)
+            usedMessages.push(message)
+            
+            return message
+        }
+
+        function clamp(value, min, max) {
+            return Math.min(Math.max(value, min), max)
+        }
+
+        function applyTransform(card, state) {
+            const scale = state.scale ?? 1
+            const angle = state.angle ?? 0
+            card.style.transform = `scale(${scale}) rotate(${angle}deg)`
+        }
+
+        function bringToFront(card) {
+            if (card === activeMaximizedCard) {
+                card.style.zIndex = MAXIMIZED_LAYER
+                return
+            }
+
+            zIndexCursor += 1
+            if (activeMaximizedCard && zIndexCursor >= MAXIMIZED_LAYER) {
+                zIndexCursor = MAXIMIZED_LAYER - 1
+            }
+
+            card.style.zIndex = zIndexCursor
+        }
+
+        function updateBodyMaximizedState() {
+            document.body.classList.toggle(
+                'has-maximized-card',
+                Boolean(activeMaximizedCard)
+            )
+        }
+
+        function scheduleNextSpawn() {
+            clearTimeout(spawnTimer)
+            spawnTimer = setTimeout(() => {
+                if (!document.hidden) {
+                    createCard()
+                }
+                scheduleNextSpawn()
+            }, spawnInterval)
+        }
+
+        function syncMobileMode() {
+            const nextIsMobile =
+                pointerMediaQuery.matches || window.innerWidth <= 768
+            if (nextIsMobile === isMobile) return
+
+            isMobile = nextIsMobile
+            maxCards = isMobile ? 100 : 150
+            spawnInterval = isMobile ? 500 : 300
+            document.body.classList.toggle('is-mobile', isMobile)
+            scheduleNextSpawn()
+        }
+
+        function handleBoardClick(event) {
+            const control = event.target.closest('.control')
+            if (!control) return
+
+            const card = control.closest('.card')
+            if (!card || !board.contains(card)) return
+
+            event.preventDefault()
+
+            if (control.classList.contains('close')) {
+                closeCard(card)
+            } else if (control.classList.contains('minimize')) {
+                minimizeCard(card)
+            } else if (control.classList.contains('maximize')) {
+                toggleMaximize(card)
+            }
+        }
+
+        function handleBoardPointerDown(event) {
+            const card = event.target.closest('.card')
+            if (!card || !board.contains(card)) return
+
+            const control = event.target.closest('.control')
+            const header = event.target.closest('.card-header')
+            const pointerType = event.pointerType || 'mouse'
+            const isPrimaryPointer = event.isPrimary !== false
+
+            if (
+                header &&
+                !control &&
+                pointerType !== 'touch' &&
+                isPrimaryPointer
+            ) {
+                startDrag(event, card)
+                return
+            }
+
+            bringToFront(card)
+        }
+
+        function handleBoardDoubleClick(event) {
+            const header = event.target.closest('.card-header')
+            if (!header || event.target.closest('.control')) return
+
+            const card = header.closest('.card')
+            if (!card || !board.contains(card)) return
+
+            toggleMaximize(card)
+        }
+
+        board.addEventListener('click', handleBoardClick)
+        board.addEventListener('pointerdown', handleBoardPointerDown)
+        board.addEventListener('dblclick', handleBoardDoubleClick)
+
+        function closeCard(card) {
+            const state = cardStates.get(card)
+            if (!state || state.closing) return
+            if (card === activeMaximizedCard) {
+                activeMaximizedCard = null
+                updateBodyMaximizedState()
+            }
+            state.closing = true
+            state.scale = 0.1
+            card.style.opacity = '0'
+            applyTransform(card, state)
+
+            const handleTransitionEnd = event => {
+                if (event.propertyName === 'opacity') {
+                    card.removeEventListener('transitionend', handleTransitionEnd)
+                    card.remove()
+                }
+            }
+
+            card.addEventListener('transitionend', handleTransitionEnd)
+        }
+
+        function minimizeCard(card) {
+            const state = cardStates.get(card)
+            if (!state || state.closing) return
+
+            const runMinimize = () => {
+                state.closing = true
+                bringToFront(card)
+                const bottom = Math.max(window.innerHeight - 24, 0)
+                const targetLeft = clamp(
+                    state.left,
+                    16,
+                    Math.max(window.innerWidth - card.offsetWidth - 16, 16)
+                )
+
+                state.left = targetLeft
+                state.top = bottom
+                state.scale = 0.1
+                state.angle = 0
+                card.style.left = `${targetLeft}px`
+                card.style.top = `${bottom}px`
+                card.style.opacity = '0.35'
+                applyTransform(card, state)
+
+                const handleTransitionEnd = event => {
+                    if (event.propertyName === 'transform') {
+                        card.removeEventListener('transitionend', handleTransitionEnd)
+                        card.remove()
+                    }
+                }
+
+                card.addEventListener('transitionend', handleTransitionEnd)
+            }
+
+            if (state.maximized) {
+                restoreFromMaximize(card, state)
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(runMinimize)
+                })
+                return
+            }
+
+            runMinimize()
+        }
+
+        function toggleMaximize(card) {
+            const state = cardStates.get(card)
+            if (!state || state.closing) return
+
+            if (state.maximized) {
+                restoreFromMaximize(card, state)
+            } else {
+                maximizeCard(card, state)
+            }
+        }
+
+        function maximizeCard(card, state) {
+            if (activeMaximizedCard && activeMaximizedCard !== card) {
+                const activeState = cardStates.get(activeMaximizedCard)
+                if (activeState) {
+                    restoreFromMaximize(activeMaximizedCard, activeState)
+                }
+            }
+
+            state.beforeMaximize = {
+                left: state.left,
+                top: state.top,
+                scale: state.scale ?? 1,
+                angle: state.angle ?? 0,
+                width: card.offsetWidth,
+                height: card.offsetHeight,
+                inlinePosition: card.style.position
+            }
+
+            card.classList.add('maximized')
+            card.style.position = 'fixed'
+            card.style.left = '0px'
+            card.style.top = '0px'
+            card.style.width = '100vw'
+            card.style.height = '100dvh'
+            card.style.borderRadius = '0'
+
+            state.left = 0
+            state.top = 0
+            state.scale = 1
+            state.angle = 0
+            applyTransform(card, state)
+            activeMaximizedCard = card
+            bringToFront(card)
+            state.maximized = true
+            updateBodyMaximizedState()
+        }
+
+        function restoreFromMaximize(card, state) {
+            const previous = state.beforeMaximize
+            if (!previous) return
+
+            card.classList.remove('maximized')
+            card.style.position = previous.inlinePosition || 'absolute'
+            card.style.left = `${previous.left}px`
+            card.style.top = `${previous.top}px`
+            card.style.width = `${previous.width}px`
+            card.style.height = `${previous.height}px`
+            card.style.borderRadius = '12px'
+
+            state.left = previous.left
+            state.top = previous.top
+            state.scale = previous.scale ?? 1
+            state.angle = previous.angle ?? state.angle ?? 0
+            applyTransform(card, state)
+            state.maximized = false
+            if (activeMaximizedCard === card) {
+                activeMaximizedCard = null
+                updateBodyMaximizedState()
+            }
+            bringToFront(card)
+            setTimeout(() => {
+                if (!state.maximized) {
+                    card.style.width = ''
+                    card.style.height = ''
+                    card.style.borderRadius = ''
+                    if (previous.inlinePosition) {
+                        card.style.position = previous.inlinePosition
+                    } else {
+                        card.style.position = ''
+                    }
+                    state.beforeMaximize = null
+                }
+            }, 360)
+        }
+
+        function startDrag(event, card) {
+            const control = event.target.closest('.control')
+            if (control) return
+
+            const state = cardStates.get(card)
+            if (!state || state.closing || state.maximized) return
+
+            event.preventDefault()
+            bringToFront(card)
+
+            const header = card.querySelector('.card-header')
+            card.classList.add('dragging')
+            header.classList.add('dragging')
+
+            state.dragging = true
+            state.dragOffsetX = event.clientX - state.left
+            state.dragOffsetY = event.clientY - state.top
+
+            let dragFrame = null
+            let pendingLeft = state.left
+            let pendingTop = state.top
+
+            const commitDrag = () => {
+                dragFrame = null
+                const maxLeft = Math.max(window.innerWidth - card.offsetWidth, 0)
+                const maxTop = Math.max(window.innerHeight - card.offsetHeight, 0)
+                state.left = clamp(pendingLeft, -card.offsetWidth * 0.4, maxLeft)
+                state.top = clamp(pendingTop, -card.offsetHeight * 0.4, maxTop)
+                card.style.left = `${state.left}px`
+                card.style.top = `${state.top}px`
+            }
+
+            const handlePointerMove = moveEvent => {
+                if (!state.dragging) return
+
+                pendingLeft = moveEvent.clientX - state.dragOffsetX
+                pendingTop = moveEvent.clientY - state.dragOffsetY
+                if (dragFrame === null) {
+                    dragFrame = requestAnimationFrame(commitDrag)
+                }
+            }
+
+            const handlePointerUp = () => {
+                state.dragging = false
+                card.classList.remove('dragging')
+                header.classList.remove('dragging')
+                if (dragFrame !== null) {
+                    cancelAnimationFrame(dragFrame)
+                    commitDrag()
+                }
+                document.removeEventListener('pointermove', handlePointerMove)
+                document.removeEventListener('pointerup', handlePointerUp)
+            }
+
+            document.addEventListener('pointermove', handlePointerMove)
+            document.addEventListener('pointerup', handlePointerUp)
+        }
+
+        function createCard() {
+            const card = document.createElement('div')
+            card.className = 'card'
+
+            const color = randomFrom(colors)
+            const angleRange = isMobile ? 6 : 10
+            const angle = (Math.random() - 0.5) * angleRange
+            const entryScale = isMobile ? 0.8 : 0.65
+            const cardWidth = isMobile ? 180 : 220
+            const cardHeight = isMobile ? 130 : 140
+            
+            const horizontalMargin = -cardWidth * 0.2
+            const verticalMargin = -cardHeight * 0.2
+            const left =
+                horizontalMargin +
+                Math.random() *
+                    Math.max(window.innerWidth - cardWidth - horizontalMargin * 2, 0)
+            const top =
+                verticalMargin +
+                Math.random() *
+                    Math.max(window.innerHeight - cardHeight - verticalMargin * 2, 0)
+
+            card.style.background = color
+            card.style.left = `${left}px`
+            card.style.top = `${top}px`
+            card.style.opacity = '0'
+            if (activeMaximizedCard && zIndexCursor >= MAXIMIZED_LAYER - 2) {
+                zIndexCursor = MAXIMIZED_LAYER - 2
+            }
+            card.style.zIndex = ++zIndexCursor
+
+            card.innerHTML = `
+                <div class="card-header">
+                    <div class="window-controls">
+                        <button class="control close" type="button" aria-label="关闭"></button>
+                        <button class="control minimize" type="button" aria-label="最小化"></button>
+                        <button class="control maximize" type="button" aria-label="最大化"></button>
+                    </div>
+                    <div class="card-title">温馨提示</div>
+                </div>
+                <div class="card-body">${getNextMessage()}</div>
+            `
+
+            const state = {
+                angle,
+                scale: entryScale,
+                left,
+                top,
+                maximized: false,
+                closing: false
+            }
+
+            cardStates.set(card, state)
+            applyTransform(card, state)
+            board.appendChild(card)
+
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    state.scale = 1
+                    applyTransform(card, state)
+                    card.style.opacity = '1'
+                })
+            })
+
+            if (board.children.length > maxCards) {
+                const oldest = board.firstElementChild
+                if (oldest && oldest !== card) {
+                    oldest.remove()
+                }
+            }
+        }
+
+        function clearAllCards() {
+            const cards = document.querySelectorAll('.card')
+            cards.forEach(card => {
+                const state = cardStates.get(card)
+                if (state && !state.closing) {
+                    state.closing = true
+                    state.scale = 0.1
+                    card.style.opacity = '0'
+                    applyTransform(card, state)
+
+                    const handleTransitionEnd = event => {
+                        if (event.propertyName === 'opacity') {
+                            card.removeEventListener('transitionend', handleTransitionEnd)
+                            card.remove()
+                        }
+                    }
+
+                    card.addEventListener('transitionend', handleTransitionEnd)
+                }
+            })
+            
+            if (activeMaximizedCard) {
+                activeMaximizedCard = null
+                updateBodyMaximizedState()
+            }
+        }
+
+        clearAllBtn.addEventListener('click', clearAllCards)
+
+        for (let i = 0; i < initialCardCount; i++) {
+            setTimeout(createCard, i * (isMobile ? 100 : 60))
+        }
+
+        scheduleNextSpawn()
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                scheduleNextSpawn()
+            }
+        })
+
+        if (typeof pointerMediaQuery.addEventListener === 'function') {
+            pointerMediaQuery.addEventListener('change', syncMobileMode)
+        } else if (typeof pointerMediaQuery.addListener === 'function') {
+            pointerMediaQuery.addListener(syncMobileMode)
+        }
+
+        window.addEventListener('resize', syncMobileMode)
+    </script>
+</body>
+</html>
